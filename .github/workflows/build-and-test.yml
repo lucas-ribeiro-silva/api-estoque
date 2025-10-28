@@ -1,60 +1,96 @@
-# 1. Nome do Workflow (Aparecerá no GitHub)
-name: Java CI - Build e Teste da API
+# 1. Nome do Workflow
+name: CI - Build, Teste Unitário e Teste de API E2E
 
 # 2. Gatilho (Trigger)
-#    Isso diz ao GitHub para rodar este workflow toda vez que
-#    alguém der um 'push' na branch 'main'.
 on:
   push:
     branches: [ "main" ]
 
 # 3. Tarefas (Jobs)
-#    O que o GitHub deve fazer.
 jobs:
-  build:
-    # 4. Máquina Virtual
-    #    Vamos usar a última versão do Ubuntu Linux.
+  build-and-test-api:
     runs-on: ubuntu-latest
 
-    # 5. Serviços (A "Mágica" está aqui)
-    #    Isso diz ao GitHub para iniciar um container Docker
-    #    ANTES de rodar nossos testes.
+    # Serviços (Nosso banco de dados)
     services:
-      # Nome do serviço: 'postgres'
       postgres:
-        image: postgres:15-alpine # A mesma imagem que usamos localmente
-        # Configuração do banco (deve ser IDÊNTICA ao application.properties)
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: Password@123
           POSTGRES_DB: api_estoque_db
-        # Expõe a porta 5432 do container para a máquina virtual
         ports:
           - 5432:5432
-        # Opção de saúde: espera o postgres aceitar conexões antes de continuar
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
-    # 6. Passos (Steps)
-    #    Os comandos que a máquina virtual vai rodar.
+    # 4. Passos (Steps)
     steps:
-      # Passo 1: Baixar o código do repositório
-      - name: Checkout do Repositório
+      # --- INÍCIO DO PROJETO 1 (api-estoque) ---
+
+      # Passo 1: Baixar o código do Projeto 1 (api-estoque)
+      - name: Checkout do Repositório da API (Projeto 1)
         uses: actions/checkout@v4
+        # 'path' diz para baixar o código para uma pasta chamada 'api-estoque'
+        with:
+          path: api-estoque
 
       # Passo 2: Configurar o Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin' # Uma distribuição popular do Java
+          distribution: 'temurin'
+          # Cacheia os downloads do Maven para ser mais rápido
+          cache: 'maven'
 
-      # Passo 3: Rodar o Build e os Testes
-      - name: Build e Testes com Maven
-        # Este comando vai rodar o 'ApiEstoqueApplicationTests'.
-        # O teste vai procurar por um banco em 'localhost:5432'
-        # e vai encontrar o serviço 'postgres' que iniciamos acima!
+      # Passo 3: Build e Teste Unitário do Projeto 1
+      - name: Build da API (Projeto 1) com Maven
+        # 'working-directory' diz ao comando para rodar DENTRO da pasta 'api-estoque'
+        working-directory: ./api-estoque
+        # -B é "batch mode" e -D... pula os testes (vamos rodá-los depois)
         run: mvn -B clean install
+
+      # Passo 4: EXECUTAR A API (NOVO!)
+      - name: Executar API (Projeto 1) em Background
+        working-directory: ./api-estoque
+        # O '&' no final é o comando mágico do Linux que
+        # roda o processo em "background" e deixa o workflow continuar
+        run: mvn spring-boot:run &
+
+      # Passo 5: Esperar a API iniciar (NOVO!)
+      - name: Esperar a API (Projeto 1) ficar online
+        # Vamos dar 30 segundos para o Spring Boot "subir"
+        # O 'curl' tenta bater no 'localhost:8080' até ter sucesso
+        run: |
+          echo "Aguardando a API em localhost:8080..."
+          timeout 30s bash -c 'until curl -s http://localhost:8080/api/products > /dev/null; do echo "Aguardando..." && sleep 2; done'
+          echo "API está online!"
+
+      # --- FIM DO PROJETO 1 ---
+
+      # --- INÍCIO DO PROJETO 2 (api-estoque-tests) ---
+
+      # Passo 6: Baixar o código do Projeto 2 (api-estoque-tests) (NOVO!)
+      - name: Checkout do Repositório de Testes (Projeto 2)
+        uses: actions/checkout@v4
+        with:
+          # IMPORTANTE: O nome do seu repositório de testes
+          repository: lucas-ribeiro-silva/api-estoque-tests
+          # Precisamos de um token para o GitHub Actions poder
+          # acessar outro repositório seu
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 'path' diz para baixar para uma pasta SEPARADA
+          path: api-estoque-tests
+
+      # Passo 7: Rodar os Testes de API E2E (Projeto 2) (NOVO!)
+      - name: Executar Testes de API (Projeto 2) com Maven
+        working-directory: ./api-estoque-tests
+        # Este comando roda o 'OrderLogicTests'
+        # contra a API que está rodando em 'localhost:8080'
+        run: mvn -B test -Dtest=OrderLogicTests
+
+      # --- FIM DO PROJETO 2 ---
