@@ -1,0 +1,60 @@
+# 1. Nome do Workflow (Aparecerá no GitHub)
+name: Java CI - Build e Teste da API
+
+# 2. Gatilho (Trigger)
+#    Isso diz ao GitHub para rodar este workflow toda vez que
+#    alguém der um 'push' na branch 'main'.
+on:
+  push:
+    branches: [ "main" ]
+
+# 3. Tarefas (Jobs)
+#    O que o GitHub deve fazer.
+jobs:
+  build:
+    # 4. Máquina Virtual
+    #    Vamos usar a última versão do Ubuntu Linux.
+    runs-on: ubuntu-latest
+
+    # 5. Serviços (A "Mágica" está aqui)
+    #    Isso diz ao GitHub para iniciar um container Docker
+    #    ANTES de rodar nossos testes.
+    services:
+      # Nome do serviço: 'postgres'
+      postgres:
+        image: postgres:15-alpine # A mesma imagem que usamos localmente
+        # Configuração do banco (deve ser IDÊNTICA ao application.properties)
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: Password@123
+          POSTGRES_DB: api_estoque_db
+        # Expõe a porta 5432 do container para a máquina virtual
+        ports:
+          - 5432:5432
+        # Opção de saúde: espera o postgres aceitar conexões antes de continuar
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # 6. Passos (Steps)
+    #    Os comandos que a máquina virtual vai rodar.
+    steps:
+      # Passo 1: Baixar o código do repositório
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      # Passo 2: Configurar o Java 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin' # Uma distribuição popular do Java
+
+      # Passo 3: Rodar o Build e os Testes
+      - name: Build e Testes com Maven
+        # Este comando vai rodar o 'ApiEstoqueApplicationTests'.
+        # O teste vai procurar por um banco em 'localhost:5432'
+        # e vai encontrar o serviço 'postgres' que iniciamos acima!
+        run: mvn -B clean install
