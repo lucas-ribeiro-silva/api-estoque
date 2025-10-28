@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  # Serviço do Banco de Dados PostgreSQL
+  db-postgres:
+    image: "postgres:15-alpine" # Uma imagem leve do Postgres
+    ports:
+      - "5432:5432" # Expõe a porta padrão do Postgres (5432)
+    environment:
+      # Define o usuário, senha e o banco de dados que serão criados
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "Password@123"
+      POSTGRES_DB: "api_estoque_db"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Garante que os dados persistam
+
+volumes:
+  postgres-data:
+    driver: local
